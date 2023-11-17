@@ -31,87 +31,87 @@ def concretize_graph(ir: GraphIR, model: z3.ModelRef) -> GraphIR:
 class BaseGen:
     def __init__(
         self,
-        opset: List[AbsOpBase],
-        seed: Optional[int] = None,
-        forward_prob: Optional[float] = None,
-        concr_ph_dim_rng: Tuple[int, int] = (1, 64),
-        max_elem_per_tensor: int = 2**16,
-        rank_choices=None,
-        dtype_choices=None,
+        opset: List[AbsOpBase],  # 接受一个抽象算子集列表，里面包含了预定义的算子规范
+        seed: Optional[int] = None,  # 随机种子
+        forward_prob: Optional[float] = None,  # 前向插入的概率
+        concr_ph_dim_rng: Tuple[int, int] = (1, 64),  # 占位符的维度范围1~64不等
+        max_elem_per_tensor: int = 2**16,  # 张量的最大元素数，默认值2的16次方
+        rank_choices=None,  # 可选的张量秩
+        dtype_choices=None,  # 数据类型的选择
     ):
         assert len(opset) > 0, "opset must not be empty"
         if seed is not None:
             set_seed(seed)
 
         self.seed = seed
-        self.op_candidates = opset
-        self.ir = GraphIR()
-        self.monotonic_placeholder_id = 0
+        self.op_candidates = opset  # 候选算子集
+        self.ir = GraphIR()  # ir是nnsmith预定义的图级中间表示
+        self.monotonic_placeholder_id = 0  # 用于表示生成器中已经使用的占位符的最大编号
 
-        # Names of current placeholders
+        # 当前占位符的名称列表
         self.placeholders: List[str] = []
         # for all (including newly created tmp) placeholders
-        self.forward_prob = 0.5 if forward_prob is None else forward_prob
-        self.concr_ph_dim_rng = concr_ph_dim_rng
-        self.max_elem_per_tensor = max_elem_per_tensor
-        self.rank_choices = rank_choices if rank_choices else rank_all()
-        # analyze the dtypes used by the opset
+        self.forward_prob = 0.5 if forward_prob is None else forward_prob  # 如果前向插入概率没有给出的话，那么前后插入55开概率
+        self.concr_ph_dim_rng = concr_ph_dim_rng  # 占位符的维度范围1~64不等
+        self.max_elem_per_tensor = max_elem_per_tensor  # 张量的最大元素数
+        self.rank_choices = rank_choices if rank_choices else rank_all()  # 秩的选择默认为5
+        # 分析算子集中使用的数据类型
         dtype_top = set()
         for op in opset:
             dtype_top.update({dt for dtc in op.in_dtypes + op.out_dtypes for dt in dtc})
 
         self.dtype_choices = (
             [
-                dt if isinstance(dt, DType) else DType.from_str(dt)
-                for dt in dtype_choices
+                dt if isinstance(dt, DType) else DType.from_str(dt)  # 如果dt是对应的DType实例则保留否则进行转换
+                for dt in dtype_choices  # 遍历数据选择列表
             ]
-            if dtype_choices
-            else DTYPE_GEN_ALL
+            if dtype_choices  # 如果提供了这个参数值就遍历生成
+            else DTYPE_GEN_ALL  # 否则使用全部的DType类型
         )
 
         self.dtype_choices = list(dtype_top.intersection(self.dtype_choices))
         assert len(self.dtype_choices) > 0, "dtype_choices must not be empty"
         assert len(self.rank_choices) > 0, "rank_choices must not be empty"
 
-    def random_rank(self):
+    def random_rank(self):  # 为张量随机选择一个秩
         return random.choice(self.rank_choices)
 
-    def tensor_type_constraints(
-        self, atensor: AbsTensor
-    ) -> List[Union[z3.BoolRef, bool]]:
+    def tensor_type_constraints(  # 返回一个约束列表，用于对atensor的类型进行约束
+        self, atensor: AbsTensor  # 具体来说，该方法秩包含一个约束，即atensor的元素个数不得超过张量最大元素数
+    ) -> List[Union[z3.BoolRef, bool]]:  # 返回的约束列表中的元素要么都是布尔值要是都z3布尔值
         return [atensor.nelement() <= self.max_elem_per_tensor]
 
     @abstractmethod
-    def assume(self, c: Union[z3.BoolRef, bool]):
+    def assume(self, c: Union[z3.BoolRef, bool]):  # 抽象方法，用于处理不同约束，会在子类中得到具体实现
         pass
 
-    def make_symbolic_placeholder(self, rank, dtype=None) -> Placeholder:
-        syms = self.new_syms(
+    def make_symbolic_placeholder(self, rank, dtype=None) -> Placeholder:  # 创建一个符号化的占位符
+        syms = self.new_syms(  # 这里创建了一组新的符号化变量
             [f"ph{self.monotonic_placeholder_id}_{k}" for k in range(rank)]
         )
-        ph = Placeholder(
+        ph = Placeholder(  # 给定了一个抽象张量，实例化一个ph对象
             AbsTensor(
                 shape=syms,
                 dtype=dtype if dtype is not None else self.random_dtype_gen(),
             )
         )
-        self.monotonic_placeholder_id += 1
+        self.monotonic_placeholder_id += 1  # 单调占位符id+1
         return ph
 
     def make_random_concrete_placeholder(self, rank, dtype=None):
-        l, r = self.concr_ph_dim_rng
-        shape = []
-        product = 1
-        for _ in range(rank):
-            v = random.randint(l, r)
-            if product * v > self.max_elem_per_tensor:
+        l, r = self.concr_ph_dim_rng  # 占位符的左右维度界限
+        shape = []  # shape作为一个空列表用于存储占位符的维度
+        product = 1  # product作为一个变量用于追踪当前状态下的元素数量
+        for _ in range(rank):  # 循环占位符的维度数量
+            v = random.randint(l, r)  # 对于每一个维度，随机生成一个纬度值
+            if product * v > self.max_elem_per_tensor:  # 检查生成的元素个数是否超过了最大允许元素数，如果是，则将维度值重置为 1。
                 v = 1
-            shape.append(v)
-            product *= v
+            shape.append(v)  # 添加到占位符的shape中
+            product *= v  # 累成当前元素数
 
-        random.shuffle(shape)  # shuffle
+        random.shuffle(shape)  # shuffle 将维度进行随机打乱 [YSY] 这个地方为什么要随机打乱？
 
-        ph = Placeholder(
+        ph = Placeholder(  # 给定了一个抽象张量，实例化一个ph对象
             AbsTensor(
                 shape=shape,
                 dtype=dtype if dtype is not None else self.random_dtype_gen(),
@@ -133,10 +133,10 @@ class BaseGen:
                 wts[dtypes.index(dt)] = 4
         return random.choices(dtypes, weights=wts)[0]
 
-    def new_sym(self, name):
+    def new_sym(self, name):  # 将name转换为z3int型
         return z3.Int(name)
 
-    def new_syms(self, names):
+    def new_syms(self, names):  # 将一组name转为一组z3int型
         return [self.new_sym(name) for name in names]
 
     def insert_init_ph_node(self, ph: Placeholder) -> InstIR:
@@ -414,7 +414,7 @@ class BaseGen:
         raise ConstraintError("Cannot find desired combinations of tensor variables.")
 
 
-def check_sat(solver: z3.Solver, *assumptions) -> z3.CheckSatResult:
+def check_sat(solver: z3.Solver, *assumptions) -> z3.CheckSatResult:  # 用于检查z3 solver中的可满足性
     start = time.time()
 
     if SMT_LOG.getEffectiveLevel() <= logging.DEBUG:
