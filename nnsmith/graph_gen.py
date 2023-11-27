@@ -109,8 +109,8 @@ class BaseGen:
             shape.append(v)  # 添加到占位符的shape中
             product *= v  # 累成当前元素数
 
-        random.shuffle(shape)  # shuffle 将维度进行随机打乱 [YSY] 这个地方为什么要随机打乱？
-
+        random.shuffle(shape)  # shuffle 将维度进行随机打乱 [YSY] 这个地方为什么要随机打乱？chatgpt:因为在实际的神经网络中，张量的维度通常没有固定的顺序，而是可以灵活调整的。因此，为了更真实地模拟神经网络的情况，随机打乱维度是有意义的
+        # 到达这一步的关键都是为了用shape变量存取每一个占位符的维度信息
         ph = Placeholder(  # 给定了一个抽象张量，实例化一个ph对象
             AbsTensor(
                 shape=shape,
