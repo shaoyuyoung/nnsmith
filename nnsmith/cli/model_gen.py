@@ -15,23 +15,23 @@ from nnsmith.narrow_spec import auto_opset
 from nnsmith.util import hijack_patch_requires, mkdir, op_filter
 
 
-@hydra.main(version_base=None, config_path="../config", config_name="main")
+@hydra.main(version_base=None, config_path="../config", config_name="main")  # 利用hydra去加载一些配置信息
 def main(cfg: DictConfig):
     # Generate a random ONNX model
     # TODO(@ganler): clean terminal outputs.
-    mgen_cfg = cfg["mgen"]
+    mgen_cfg = cfg["mgen"]  # 加载配置项
 
-    seed = random.getrandbits(32) if mgen_cfg["seed"] is None else mgen_cfg["seed"]
+    seed = random.getrandbits(32) if mgen_cfg["seed"] is None else mgen_cfg["seed"]  # 初始化随机种子
 
     MGEN_LOG.info(f"Using seed {seed}")
 
     # TODO(@ganler): skip operators outside of model gen with `cfg[exclude]`
     model_cfg = cfg["model"]
-    ModelType = Model.init(model_cfg["type"], backend_target=cfg["backend"]["target"])
-    ModelType.add_seed_setter()
+    ModelType = Model.init(model_cfg["type"], backend_target=cfg["backend"]["target"])  # 初始化模型类型
+    ModelType.add_seed_setter()  # 给这个模型配置上随机种子
 
     if cfg["backend"]["type"] is not None:
-        factory = BackendFactory.init(
+        factory = BackendFactory.init(  # 初始化后端工厂
             cfg["backend"]["type"],
             target=cfg["backend"]["target"],
             optmax=cfg["backend"]["optmax"],
@@ -41,18 +41,18 @@ def main(cfg: DictConfig):
         factory = None
 
     # GENERATION
-    opset = auto_opset(
+    opset = auto_opset(  # 根据模型类型和后端工厂，返回一个算子集
         ModelType,
         factory,
         vulops=mgen_cfg["vulops"],
         grad=mgen_cfg["grad_check"],
     )
-    opset = op_filter(opset, mgen_cfg["include"], mgen_cfg["exclude"])
-    hijack_patch_requires(mgen_cfg["patch_requires"])
-    activate_ext(opset=opset, factory=factory)
+    opset = op_filter(opset, mgen_cfg["include"], mgen_cfg["exclude"])  # 对算子集做一个初步的过滤
+    hijack_patch_requires(mgen_cfg["patch_requires"])  # 动态配置程序文件
+    activate_ext(opset=opset, factory=factory)  # 激活特定的扩展
 
-    tgen_begin = time.time()
-    gen = model_gen(
+    tgen_begin = time.time()  # 模型开始生成的时间
+    gen = model_gen(  # 实例化一个模型生成器
         opset=opset,
         method=mgen_cfg["method"],
         seed=seed,
@@ -64,7 +64,7 @@ def main(cfg: DictConfig):
     )
     tgen = time.time() - tgen_begin
 
-    if isinstance(gen, SymbolicGen):
+    if isinstance(gen, SymbolicGen):  # 如果生成的模型是符号生成模型（SymbolicGen 类的实例），则记录符号数和约束数，并在调试级别下记录解决方案。
         MGEN_LOG.info(
             f"{len(gen.last_solution)} symbols and {len(gen.solver.assertions())} constraints."
         )
@@ -72,7 +72,7 @@ def main(cfg: DictConfig):
         if MGEN_LOG.getEffectiveLevel() <= logging.DEBUG:
             MGEN_LOG.debug("solution:" + ", ".join(map(str, gen.last_solution)))
 
-    # MATERIALIZATION
+    # 实例化一个GraphIR
     tmat_begin = time.time()
     ir = gen.make_concrete()
 
@@ -85,15 +85,15 @@ def main(cfg: DictConfig):
         fmt = cfg["debug"]["viz_fmt"].replace(".", "")
         viz(ir, os.path.join(mgen_cfg["save"], f"graph.{fmt}"))
 
-    model = ModelType.from_gir(ir)
-    model.refine_weights()  # either random generated or gradient-based.
-    model.set_grad_check(mgen_cfg["grad_check"])
-    oracle = model.make_oracle()
+    model = ModelType.from_gir(ir)  # 创建一个模型实例
+    model.refine_weights()  # 优化权重
+    model.set_grad_check(mgen_cfg["grad_check"])  # 设置梯度检查
+    oracle = model.make_oracle()  # 创建一个模型对应的oracle实例
     tmat = time.time() - tmat_begin
 
     tsave_begin = time.time()
-    testcase = TestCase(model, oracle)
-    testcase.dump(root_folder=mgen_cfg["save"])
+    testcase = TestCase(model, oracle)  # 将模型和oracle包装成一个testcase
+    testcase.dump(root_folder=mgen_cfg["save"])  # 将这套测试用例保存下来
     tsave = time.time() - tsave_begin
 
     MGEN_LOG.info(

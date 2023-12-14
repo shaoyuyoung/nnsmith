@@ -781,16 +781,19 @@ class ConcolicGen(BaseGen):
         return self.ir
 
 
+# 这里是核心的模型生成函数
 def model_gen(
-    opset: Set[Type[AbsOpBase]],
-    method: str = "symbolic",
-    max_nodes=5,
+    opset: Set[Type[AbsOpBase]],  # 一组抽象算子的集合，这些算子用于构建计算图。
+    method: str = "symbolic",  # 生成模型的方法，可以是symbolic符号生成或concolic共符号生成，还可以是 "single-io"（生成只有一个输入和一个输出的模型）。
+    max_nodes=5,  # 最大节点数，即生成模型的计算图中最大允许的节点数。
     seed=None,
     timeout_ms=10000,
     **kwargs,
 ):
     assert max_nodes > 0, "max_nodes must >= 1"
 
+    # 根据传入的 method 参数，选择使用 SymbolicGen、ConcolicGen 还是 SymboliSingleIOGen 中的一个生成器
+    # 这些生成器分别实现了符号生成、共符号生成和生成只有一个输入和一个输出的模型的逻辑。
     symbolic_init = not method.endswith("-cinit")
     if method.startswith("symbolic"):
         gen = SymbolicGen(opset, seed, symbolic_init=symbolic_init, **kwargs)
@@ -801,7 +804,7 @@ def model_gen(
     else:
         raise ValueError(f"Unknown method {method}. Try `symbolic` or `concolic`.")
 
-    gen.abstract_gen(max_node_size=max_nodes, max_gen_millisec=timeout_ms)
+    gen.abstract_gen(max_node_size=max_nodes, max_gen_millisec=timeout_ms)  # 调用abstract_gen方法生成模型
 
     return gen
 

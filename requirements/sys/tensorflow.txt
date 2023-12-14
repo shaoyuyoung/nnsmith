@@ -1,3 +1,0 @@
-tf-nightly
-# NOTE: https://www.tensorflow.org/install
-# https://www.tensorflow.org/install/pip

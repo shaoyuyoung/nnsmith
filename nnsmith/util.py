@@ -24,7 +24,6 @@ except ImportError:
     pgv = None
     HAS_PYGRAPHVIZ = False
 
-
 from nnsmith.logging import CORE_LOG, VIZ_LOG
 
 SEED_SETTERS = {
@@ -34,9 +33,9 @@ SEED_SETTERS = {
 
 
 def register_seed_setter(
-    name: str,
-    fn: Callable[[int], None],
-    overwrite=False,
+        name: str,
+        fn: Callable[[int], None],
+        overwrite=False,
 ):
     if not overwrite:
         assert name not in SEED_SETTERS, f"{name} is already registered"
@@ -154,14 +153,14 @@ def hijack_patch_requires(patch_paths: Union[PathLike, List[PathLike]]):
     patch_paths = (
         patch_paths if isinstance(patch_paths, (ListConfig, list)) else [patch_paths]
     )
-    for f in patch_paths:
+    for f in patch_paths:  # 遍历patch路径中的每一个文件
         assert os.path.isfile(
             f
         ), "mgen.requires_patch must be a list of file locations."
-        text = open(f).read()
-        assert (
-            "@patch_requires(" in text
+        text = open(f).read()  # 读取内容
+        assert (  # 需要去检查是否有 @patch_requires( 这样的decorator
+                "@patch_requires(" in text
         ), f"No patch found in the {f} after checking `@patch_requires(`"
         spec = spec_from_file_location("nnsmith.ext.patch_requires", f)
-        spec.loader.exec_module(module_from_spec(spec))
+        spec.loader.exec_module(module_from_spec(spec))  # 执行指定的模块，从而导入并运行文件中的代码
         MGEN_LOG.info(f"Import patch_requires from {f}")

@@ -25,18 +25,19 @@ from nnsmith.materialize import BugReport, Model, Oracle, TestCase
 
 
 def verify_testcase(
-    cmp_cfg: DictConfig,
-    factory: BackendFactory,
-    testcase: TestCase,
-    output_dir: os.PathLike,
-    filters: List = None,
-    supress_succ=True,
-    crash_safe: bool = False,
-    timeout: Optional[int] = None,
+        cmp_cfg: DictConfig,
+        factory: BackendFactory,
+        testcase: TestCase,
+        output_dir: os.PathLike,
+        filters: List = None,
+        supress_succ=True,
+        crash_safe: bool = False,
+        timeout: Optional[int] = None,
 ) -> bool:
     if filters is None:
         filters = []
 
+    # check_result会根据bug report类型来推断本次差分的结果是否正确？
     def check_result(bug_report_or, odir, msg=None) -> bool:  # succ?
         msg = "" if msg is None else msg
         if not isinstance(bug_report_or, BugReport):
@@ -67,22 +68,22 @@ def verify_testcase(
                 bug_report.dump(odir)
             return False
 
-    bug_or_res = factory.checked_compile_and_exec(
+    bug_or_res = factory.checked_compile_and_exec(  # 模型的执行在这个地方
         testcase, crash_safe=crash_safe, timeout=timeout
     )
     if check_result(
-        bug_or_res, odir=output_dir, msg=f"Compile + Execution [{factory}]"
+            bug_or_res, odir=output_dir, msg=f"Compile + Execution [{factory}]"
     ):
         if testcase.oracle.output is not None:  # we have output results && no bug yet
             # do result verification
             if not check_result(
-                factory.verify_results(
-                    bug_or_res,
-                    testcase,
-                    equal_nan=cmp_cfg["equal_nan"],
-                ),
-                odir=output_dir,
-                msg=f"Result Verification w/ Oracle from {testcase.oracle.provider}",
+                    factory.verify_results(
+                        bug_or_res,
+                        testcase,
+                        equal_nan=cmp_cfg["equal_nan"],
+                    ),
+                    odir=output_dir,
+                    msg=f"Result Verification w/ Oracle from {testcase.oracle.provider}",
             ):
                 return False
     else:
@@ -103,18 +104,18 @@ def verify_testcase(
             timeout=timeout,
         )
         if check_result(
-            cmp_testcase,
-            odir=output_dir,
-            msg=f"Compile + Execution [`cmp.with`: {cmp_fac}]",
+                cmp_testcase,
+                odir=output_dir,
+                msg=f"Compile + Execution [`cmp.with`: {cmp_fac}]",
         ):
             if not check_result(
-                factory.verify_results(
-                    bug_or_res,
-                    cmp_testcase,
-                    equal_nan=cmp_cfg["equal_nan"],
-                ),
-                odir=output_dir,
-                msg="Result Verification w/ Reference Backend",
+                    factory.verify_results(
+                        bug_or_res,
+                        cmp_testcase,
+                        equal_nan=cmp_cfg["equal_nan"],
+                    ),
+                    odir=output_dir,
+                    msg="Result Verification w/ Reference Backend",
             ):
                 return False
         else:
@@ -129,11 +130,11 @@ def main(cfg: DictConfig):
     seed = random.getrandbits(32) if cmp_cfg["seed"] is None else cmp_cfg["seed"]
     EXEC_LOG.info(f"Using seed {seed}")
 
-    model_cfg = cfg["model"]
-    ModelType = Model.init(model_cfg["type"], cfg["backend"]["target"])
-    ModelType.add_seed_setter()
+    model_cfg = cfg["model"]  # 提取model配置
+    ModelType = Model.init(model_cfg["type"], cfg["backend"]["target"])  # 初始化模型类型，包括了使用的目标后端
+    ModelType.add_seed_setter()  # 设置模型随机种子
 
-    if isinstance(model_cfg["path"], ListConfig):
+    if isinstance(model_cfg["path"], ListConfig):  # model_paths是一个模型路径的列表
         model_paths = model_cfg["path"]
         if cmp_cfg["save"] is not None:
             assert isinstance(cmp_cfg["save"], ListConfig), (
@@ -147,10 +148,11 @@ def main(cfg: DictConfig):
     if isinstance(output_dirs, (int, float, str)):
         output_dirs = [Path(output_dirs)]
 
-    for i, model_path in enumerate(model_paths):
-        model = ModelType.load(model_path)
-        model_basename = os.path.basename(os.path.normpath(model_path))
+    for i, model_path in enumerate(model_paths):  # 遍历模型路径
+        model = ModelType.load(model_path)  # 加载模型
+        model_basename = os.path.basename(os.path.normpath(model_path))  # 获取模型路径的基本文件名
 
+        # 初始化测试输入、测试输出和提供者变量
         test_inputs = None
         test_outputs = None
         provider = "unknown"
@@ -166,7 +168,7 @@ def main(cfg: DictConfig):
             ), "Raw input type should be Dict[str, np.ndarray]"
             provider = "raw input from {}".format(cmp_cfg["raw_input"])
 
-        # 2. Otherwise, use existing or generated oracle;
+        # 2. 如果测试输入仍为None，则尝试从Oracle中加载测试输入数据。如果配置中为 "auto"，则构建 oracle.pkl 文件路径。
         if test_inputs is None:
             oracle_path = None
             # 1. check if we can directly use oracle from `oracle.pkl`
@@ -191,7 +193,7 @@ def main(cfg: DictConfig):
 
         # the oracle might not have oracle outputs.
         oracle = Oracle(test_inputs, test_outputs, provider)
-        testcase = TestCase(model, oracle)
+        testcase = TestCase(model, oracle)  # 包装成了一个完整的测试用例
 
         this_fac = BackendFactory.init(
             cfg["backend"]["type"],
