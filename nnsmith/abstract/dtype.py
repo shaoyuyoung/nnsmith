@@ -82,7 +82,7 @@ class DType(Enum):
             DType.float16: np.float16,
             DType.float32: np.float32,
             DType.float64: np.float64,
-            DType.uint8: np.uint8,
+            DType.uint8: np.uint8,  # FIXME@ysy: duplicate items
             DType.uint8: np.uint8,
             DType.uint16: np.uint16,
             DType.uint32: np.uint32,
@@ -193,7 +193,7 @@ class DType(Enum):
 
 
 # "DTYPE_GEN*" means data types used for symbolic generation.
-# "DTYPE_GEN_ALL" is surely a subset of all types but it is
+# "DTYPE_GEN_ALL" is surely a subset of all types, but it is
 # used to conservatively to avoid unsupported data types while
 # applying nnsmith to various frameworks.
 DTYPE_GEN_FLOATS = [DType.float16, DType.float32, DType.float64]
